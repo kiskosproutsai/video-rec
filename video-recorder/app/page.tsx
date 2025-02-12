@@ -1,80 +1,114 @@
-'use client';
+"use client"
 
-import React, { useRef, useState } from 'react';
+import { useState, useRef, useCallback, useEffect } from "react"
+import FileSaver from "file-saver"
 
-export default function VideoCapturePage() {
-  const videoRef = useRef<HTMLVideoElement>(null);
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [isRecording, setIsRecording] = useState(false);
-  const chunks: Blob[] = [];
+export default function VideoRecorder() {
+  const [isRecording, setIsRecording] = useState(false)
+  const [chunkCount, setChunkCount] = useState(0)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
+  const videoRef = useRef<HTMLVideoElement>(null)
+  const streamRef = useRef<MediaStream | null>(null)
+  const chunksRef = useRef<Blob[]>([])
+  const lastSaveTimeRef = useRef<number>(0)
 
-  const startRecording = async () => {
-    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
-      alert('Media devices not supported in your browser.');
-      return;
+  const saveChunk = useCallback(() => {
+    const now = Date.now()
+    if (now - lastSaveTimeRef.current < 2900) return // Prevent saving too frequently
+
+    if (chunksRef.current.length > 0) {
+      const blob = new Blob(chunksRef.current, { type: "video/webm" })
+      FileSaver.saveAs(blob, `video-chunk-${chunkCount + 1}.webm`)
+      setChunkCount((prev) => prev + 1)
+      chunksRef.current = []
+      lastSaveTimeRef.current = now
     }
+  }, [chunkCount])
 
+  const startRecording = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true, mute: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true })
+      streamRef.current = stream
       if (videoRef.current) {
-        videoRef.current.srcObject = stream;
-        videoRef.current.muted = true;
-        videoRef.current.play();
+        videoRef.current.srcObject = stream
       }
 
-      const mediaRecorder = new MediaRecorder(stream);
+      const mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9,opus" })
+      mediaRecorderRef.current = mediaRecorder
+      chunksRef.current = []
+
       mediaRecorder.ondataavailable = (event) => {
         if (event.data.size > 0) {
-          chunks.push(event.data);
+          chunksRef.current.push(event.data)
         }
-      };
+      }
 
-      mediaRecorder.onstop = () => {
-        const blob = new Blob(chunks, { type: 'video/webm' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `video-${Date.now()}.webm`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        chunks.length = 0; // Clear the chunks
-      };
+      mediaRecorder.start(3000) // Collect data every 3 seconds
+      setIsRecording(true)
+      lastSaveTimeRef.current = Date.now()
 
-      mediaRecorder.start(3000); // Record in 3-second intervals
-      mediaRecorderRef.current = mediaRecorder;
-      setIsRecording(true);
+      // Set up interval to save chunks every 3 seconds
+      const interval = setInterval(saveChunk, 3000)
+
+      return () => clearInterval(interval)
     } catch (error) {
-      console.error('Error accessing media devices:', error);
+      console.error("Error starting recording:", error)
     }
-  };
+  }, [saveChunk])
 
-  const stopRecording = () => {
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
-      mediaRecorderRef.current.stop();
+  const stopRecording = useCallback(() => {
+    if (mediaRecorderRef.current) {
+      mediaRecorderRef.current.stop()
     }
-    if (videoRef.current && videoRef.current.srcObject) {
-      const stream = videoRef.current.srcObject as MediaStream;
-      stream.getTracks().forEach((track) => track.stop());
+    if (streamRef.current) {
+      streamRef.current.getTracks().forEach((track) => track.stop())
     }
-    setIsRecording(false);
-  };
+    saveChunk() // Save any remaining data
+    setIsRecording(false)
+    setChunkCount(0)
+  }, [saveChunk])
+
+  useEffect(() => {
+    let cleanup: (() => void) | undefined
+
+    if (isRecording) {
+      startRecording().then((cleanupFn) => {
+        cleanup = cleanupFn
+      })
+    } else {
+      stopRecording()
+    }
+
+    return () => {
+      if (cleanup) cleanup()
+    }
+  }, [isRecording, startRecording, stopRecording])
 
   return (
-    <div style={{ textAlign: 'center', marginTop: '50px' }}>
-      <h1>Video Capture</h1>
-      <video ref={videoRef} style={{ width: '80%', border: '1px solid black' }} />
-      <div style={{ marginTop: '20px' }}>
-        {!isRecording ? (
-          <button onClick={startRecording} style={{ padding: '10px 20px', fontSize: '16px' }}>
-            Start Recording
-          </button>
-        ) : (
-          <button onClick={stopRecording} style={{ padding: '10px 20px', fontSize: '16px', backgroundColor: 'red', color: 'white' }}>
-            Stop Recording
-          </button>
-        )}
+    <div className="flex flex-col items-center justify-center min-h-screen bg-gray-100">
+      <div className="bg-white p-8 rounded-lg shadow-md">
+        <h1 className="text-2xl font-bold mb-4">Video Recorder</h1>
+        <video ref={videoRef} className="w-full h-64 bg-black mb-4" autoPlay muted />
+        <div className="flex justify-center space-x-4">
+          {!isRecording ? (
+            <button
+              onClick={() => setIsRecording(true)}
+              className="bg-blue-500 hover:bg-blue-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Start Recording
+            </button>
+          ) : (
+            <button
+              onClick={() => setIsRecording(false)}
+              className="bg-red-500 hover:bg-red-700 text-white font-bold py-2 px-4 rounded"
+            >
+              Stop Recording
+            </button>
+          )}
+        </div>
+        {isRecording && <p className="mt-4 text-center">Recording... Chunks saved: {chunkCount}</p>}
       </div>
     </div>
-  );
+  )
 }
+

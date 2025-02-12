@@ -6,23 +6,18 @@ import FileSaver from "file-saver"
 export default function VideoRecorder() {
   const [isRecording, setIsRecording] = useState(false)
   const [chunkCount, setChunkCount] = useState(0)
-  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const videoRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
+  const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   const chunksRef = useRef<Blob[]>([])
-  const lastSaveTimeRef = useRef<number>(0)
 
   const saveChunk = useCallback(() => {
-    const now = Date.now()
-    if (now - lastSaveTimeRef.current < 2900) return // Prevent saving too frequently
+    if (chunksRef.current.length === 0) return
 
-    if (chunksRef.current.length > 0) {
-      const blob = new Blob(chunksRef.current, { type: "video/webm" })
-      FileSaver.saveAs(blob, `video-chunk-${chunkCount + 1}.webm`)
-      setChunkCount((prev) => prev + 1)
-      chunksRef.current = []
-      lastSaveTimeRef.current = now
-    }
+    const blob = new Blob(chunksRef.current, { type: "video/webm" })
+    FileSaver.saveAs(blob, `video-chunk-${chunkCount + 1}.webm`)
+    setChunkCount((prev) => prev + 1)
+    chunksRef.current = []
   }, [chunkCount])
 
   const startRecording = useCallback(async () => {
@@ -33,7 +28,9 @@ export default function VideoRecorder() {
         videoRef.current.srcObject = stream
       }
 
-      const mediaRecorder = new MediaRecorder(stream, { mimeType: "video/webm;codecs=vp9,opus" })
+      const mediaRecorder = new MediaRecorder(stream, {
+        mimeType: "video/webm;codecs=vp9,opus",
+      })
       mediaRecorderRef.current = mediaRecorder
       chunksRef.current = []
 
@@ -43,30 +40,39 @@ export default function VideoRecorder() {
         }
       }
 
+      mediaRecorder.onstop = saveChunk
+
       mediaRecorder.start(3000) // Collect data every 3 seconds
       setIsRecording(true)
-      lastSaveTimeRef.current = Date.now()
 
       // Set up interval to save chunks every 3 seconds
-      const interval = setInterval(saveChunk, 3000)
+      const interval = setInterval(() => {
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.stop()
+          mediaRecorder.start(3000)
+        }
+      }, 3000)
 
-      return () => clearInterval(interval)
+      return () => {
+        clearInterval(interval)
+        if (mediaRecorder.state === "recording") {
+          mediaRecorder.stop()
+        }
+      }
     } catch (error) {
       console.error("Error starting recording:", error)
     }
   }, [saveChunk])
 
   const stopRecording = useCallback(() => {
-    if (mediaRecorderRef.current) {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
       mediaRecorderRef.current.stop()
     }
     if (streamRef.current) {
       streamRef.current.getTracks().forEach((track) => track.stop())
     }
-    saveChunk() // Save any remaining data
     setIsRecording(false)
-    setChunkCount(0)
-  }, [saveChunk])
+  }, [])
 
   useEffect(() => {
     let cleanup: (() => void) | undefined

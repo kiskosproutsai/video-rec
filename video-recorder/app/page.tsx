@@ -1,83 +1,80 @@
-"use client";
+'use client';
 
-import React, { useRef, useState, useCallback, useEffect } from "react";
-import Webcam from "react-webcam";
+import React, { useRef, useState } from 'react';
 
-const chunkIntervalInMilliseconds = 3000;
-
-const Home: React.FC = () => {
-  const webcamRef = useRef<Webcam>(null);
+export default function VideoCapturePage() {
+  const videoRef = useRef<HTMLVideoElement>(null);
   const mediaRecorderRef = useRef<MediaRecorder | null>(null);
-  const [recording, setRecording] = useState(false);
-  const [recordedChunks, setRecordedChunks] = useState<Blob[]>([]);
+  const [isRecording, setIsRecording] = useState(false);
+  const chunks: Blob[] = [];
 
-  // Function to handle incoming recorded data
-  const handleDataAvailable = useCallback(
-    (event: BlobEvent) => {
-      console.log("handleDataAvailable useCallback triggered", new Date(Date.now()).toLocaleString());
-      if (event.data && event.data.size > 0) {
-        // Create blob and download immediately
-        const blob = new Blob([event.data], { type: "video/webm" });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement("a");
-        a.href = url;
-        a.download = `recorded-video-${Date.now()}.webm`;
-        a.click();
-        URL.revokeObjectURL(url);
+  const startRecording = async () => {
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      alert('Media devices not supported in your browser.');
+      return;
+    }
+
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true, mute: true });
+      if (videoRef.current) {
+        videoRef.current.srcObject = stream;
+        videoRef.current.muted = true;
+        videoRef.current.play();
       }
-    },
-    []
-  );
 
-  // Function to start recording
-  const handleStartCaptureClick = useCallback(() => {
-    console.log("handleStartCaptureClick useCallback triggered", new Date(Date.now()).toLocaleString());
-    if (webcamRef.current && webcamRef.current.stream) {
-      setRecording(true);
-      const mediaRecorder = new MediaRecorder(webcamRef.current.stream, {
-        mimeType: "video/webm",
-      });
+      const mediaRecorder = new MediaRecorder(stream);
+      mediaRecorder.ondataavailable = (event) => {
+        if (event.data.size > 0) {
+          chunks.push(event.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const blob = new Blob(chunks, { type: 'video/webm' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `video-${Date.now()}.webm`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        chunks.length = 0; // Clear the chunks
+      };
+
+      mediaRecorder.start(3000); // Record in 3-second intervals
       mediaRecorderRef.current = mediaRecorder;
-      mediaRecorder.addEventListener("dataavailable", handleDataAvailable);
-      mediaRecorder.start(chunkIntervalInMilliseconds);
+      setIsRecording(true);
+    } catch (error) {
+      console.error('Error accessing media devices:', error);
     }
-  }, [handleDataAvailable]);
+  };
 
-  // Function to stop recording
-  const handleStopCaptureClick = useCallback(() => {
-    console.log("handleStopCaptureClick useCallback triggered", new Date(Date.now()).toLocaleString());
-    if (mediaRecorderRef.current) {
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== 'inactive') {
       mediaRecorderRef.current.stop();
-      setRecording(false);
     }
-  }, []);
-
-  // Video configuration settings
-  const videoConstraints = {
-    width: 500,
-    height: 500,
-    facingMode: "user",
+    if (videoRef.current && videoRef.current.srcObject) {
+      const stream = videoRef.current.srcObject as MediaStream;
+      stream.getTracks().forEach((track) => track.stop());
+    }
+    setIsRecording(false);
   };
 
   return (
-    <div style={{ textAlign: "center", padding: "20px" }}>
-      <h1>Video Recorder</h1>
-      <Webcam
-        audio={true}
-        muted={true}
-        ref={webcamRef}
-        videoConstraints={videoConstraints}
-        style={{ marginBottom: "20px" }}
-      />
-      <div>
-        {recording ? (
-          <button onClick={handleStopCaptureClick}>Stop Recording</button>
+    <div style={{ textAlign: 'center', marginTop: '50px' }}>
+      <h1>Video Capture</h1>
+      <video ref={videoRef} style={{ width: '80%', border: '1px solid black' }} />
+      <div style={{ marginTop: '20px' }}>
+        {!isRecording ? (
+          <button onClick={startRecording} style={{ padding: '10px 20px', fontSize: '16px' }}>
+            Start Recording
+          </button>
         ) : (
-          <button onClick={handleStartCaptureClick}>Start Recording</button>
+          <button onClick={stopRecording} style={{ padding: '10px 20px', fontSize: '16px', backgroundColor: 'red', color: 'white' }}>
+            Stop Recording
+          </button>
         )}
       </div>
     </div>
   );
-};
-
-export default Home;
+}

@@ -13,7 +13,9 @@ const Home: React.FC = () => {
 
   // Function to handle incoming recorded data
   const handleDataAvailable = useCallback(
+
     (event: BlobEvent) => {
+      console.log("handleDataAvailable useCallback triggered", new Date(Date.now()).toLocaleString());
       if (event.data.size > 0) {
         setRecordedChunks((prev) => prev.concat(event.data));
       }
@@ -23,6 +25,7 @@ const Home: React.FC = () => {
 
   // Function to start recording
   const handleStartCaptureClick = useCallback(() => {
+    console.log("handleStartCaptureClick useCallback triggered", new Date(Date.now()).toLocaleString());
     if (webcamRef.current && webcamRef.current.stream) {
       setRecording(true);
       mediaRecorderRef.current = new MediaRecorder(webcamRef.current.stream, {
@@ -38,6 +41,7 @@ const Home: React.FC = () => {
 
   // Function to stop recording
   const handleStopCaptureClick = useCallback(() => {
+    console.log("handleStopCaptureClick useCallback triggered", new Date(Date.now()).toLocaleString());
     if (mediaRecorderRef.current) {
       mediaRecorderRef.current.stop();
       setRecording(false);
@@ -46,6 +50,7 @@ const Home: React.FC = () => {
 
   // Function to download video chunks
   const downloadChunks = useCallback(() => {
+    console.log("downloadChunks useCallback triggered", new Date(Date.now()).toLocaleString());
     if (recordedChunks.length > 0) {
       const blob = new Blob(recordedChunks, { type: "video/webm" });
       const url = URL.createObjectURL(blob);
@@ -60,8 +65,9 @@ const Home: React.FC = () => {
     }
   }, [recordedChunks]);
 
-  // Automatically download chunks every 5 seconds while recording
+  // Automatically download chunks every X seconds while recording
   useEffect(() => {
+    console.log("useEffect triggered", new Date(Date.now()).toLocaleString());
     let interval: NodeJS.Timeout | null = null;
     if (recording) {
       interval = setInterval(() => {

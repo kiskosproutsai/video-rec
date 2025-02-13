@@ -68,6 +68,11 @@ export default function VideoRecorder() {
 
       // Start recording with 3-second intervals
       mediaRecorder.start(3000)
+      // The start() method can take an optional parameter called timeslice (in milliseconds):
+      // If you call mediaRecorder.start() with no parameter, it will only emit data when you call stop()
+      // If you call mediaRecorder.start(timeslice) with a millisecond value, it will:
+      // Start recording
+      // Fire the dataavailable event every timeslice milliseconds
       setIsRecording(true)
 
       // Set up interval to save chunks every 3 seconds

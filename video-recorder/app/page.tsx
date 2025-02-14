@@ -19,6 +19,7 @@ export default function VideoRecorder() {
   const mediaRecorderRef = useRef<MediaRecorder | null>(null)
   // Ref to store video chunks before saving
   const chunksRef = useRef<Blob[]>([])
+  const chunkingIntervalInMilliseconds = 3000
 
   // Function to save recorded video chunks
   const saveChunk = useCallback(() => {
@@ -67,7 +68,7 @@ export default function VideoRecorder() {
       mediaRecorder.onstop = saveChunk
 
       // Start recording with 3-second intervals
-      mediaRecorder.start(3000)
+      mediaRecorder.start(chunkingIntervalInMilliseconds)
       // The start() method can take an optional parameter called timeslice (in milliseconds):
       // If you call mediaRecorder.start() with no parameter, it will only emit data when you call stop()
       // If you call mediaRecorder.start(timeslice) with a millisecond value, it will:
@@ -79,9 +80,9 @@ export default function VideoRecorder() {
       const interval = setInterval(() => {
         if (mediaRecorder.state === "recording") {
           mediaRecorder.stop()
-          mediaRecorder.start(3000)
+          mediaRecorder.start(chunkingIntervalInMilliseconds)
         }
-      }, 3000)
+      }, chunkingIntervalInMilliseconds)
 
       // Return cleanup function
       return () => {
